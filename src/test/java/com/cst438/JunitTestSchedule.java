@@ -4,6 +4,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.testng.Assert.assertFalse;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -125,7 +126,7 @@ public class JunitTestSchedule {
 		}
 	}
 
-	private static <T> T  fromJsonString(String str, Class<T> valueType ) {
+	static <T> T  fromJsonString(String str, Class<T> valueType) {
 		try {
 			return new ObjectMapper().readValue(str, valueType);
 		} catch (Exception e) {
