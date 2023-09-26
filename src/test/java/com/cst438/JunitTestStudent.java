@@ -1,15 +1,9 @@
 package com.cst438;
 
-import com.cst438.controller.StudentController;
-import com.cst438.domain.Student;
+
 import com.cst438.domain.StudentDTO;
-import com.cst438.domain.StudentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,154 +12,237 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 public class JunitTestStudent {
 
-    @Mock
-    private StudentRepository studentRepository;
-
-    @InjectMocks
-    private StudentController studentController;
-
     @Autowired
     private MockMvc mvc;
 
-    @BeforeEach
-    public void setUp() {
-        MockitoAnnotations.openMocks(this);
-//        studentController = new StudentController(studentRepository);
-//        mvc = MockMvcBuilders.standaloneSetup(studentController).build();
-    }
-
     @Test
-    public void testGetStudent() throws Exception {
-        Student student = new Student();
-        student.setStudent_id(1);
-        student.setName("John Doe");
-        student.setEmail("john.doe@example.com");
+    public void createStudent() throws Exception {
+        StudentDTO sdto = new StudentDTO(0, "name test", "ntest@csumb.edu", 0, null);
+        MockHttpServletResponse response;
 
-        when(studentRepository.findByStudentId(1)).thenReturn(student);
-
-        MockHttpServletResponse response = mvc.perform(
+        response = mvc.perform(
                         MockMvcRequestBuilders
-                                .get("/student/{student_id}", 1)
+                                .post("/student")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        int  student_id = Integer.parseInt(response.getContentAsString());
+        assertTrue(student_id > 0);
+
+        // retrieve the student
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .get("/student/"+student_id)
                                 .accept(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        StudentDTO actual = fromJsonString(response.getContentAsString(), StudentDTO.class);
+        assertEquals(sdto.name(), actual.name());
+        assertEquals(sdto.email(), actual.email());
+        assertEquals(sdto.statusCode(), actual.statusCode());
 
-        // Assert the HTTP status code
+        // delete the new student
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/"+student_id))
+                .andReturn().getResponse();
         assertEquals(200, response.getStatus());
 
     }
 
     @Test
-    public void testCreateStudent() throws Exception {
-        StudentDTO studentDTO = new StudentDTO(1, "John Doe", "john.doe@example.com", 1, "Active");
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        String studentDTOJson = objectMapper.writeValueAsString(studentDTO);
-
+    public void createStudentDupEmail() throws Exception {
+        StudentDTO sdto = new StudentDTO(0, "name test", "ntest@csumb.edu", 0, null);
         MockHttpServletResponse response;
 
         response = mvc.perform(
                         MockMvcRequestBuilders
                                 .post("/student")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(studentDTOJson))
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
                 .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        int  student_id = Integer.parseInt(response.getContentAsString());
+        assertTrue(student_id > 0);
+
+        // try to create another student with same email
+        sdto = new StudentDTO(0, "name2 test2", "ntest@csumb.edu", 0, null);
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .post("/student")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
+                .andReturn().getResponse();
+        assertEquals(400, response.getStatus()); // BAD_REQUEST
+        assertTrue(response.getErrorMessage().contains("student email already exists"));
 
 
+        // delete the new student
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/"+student_id))
+                .andReturn().getResponse();
         assertEquals(200, response.getStatus());
 
+    }
+
+    @Test
+    public void updateStudent() throws Exception  {
+
+        MockHttpServletResponse response;
+
+        // retrieve the student id = 2
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .get("/student/2")
+                                .accept(MediaType.APPLICATION_JSON))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        StudentDTO original = fromJsonString(response.getContentAsString(), StudentDTO.class);
+        // modify name, email and statusCode
+        StudentDTO mod = new StudentDTO(original.studentId(), "new name", "newname@csumb.edu", 1, "balance outstanding");
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .put("/student/2")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(mod)))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+
+        // retrieve again and check updated fields
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .get("/student/2")
+                                .accept(MediaType.APPLICATION_JSON))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        StudentDTO actual = fromJsonString(response.getContentAsString(), StudentDTO.class);
+        assertEquals(mod, actual);
+    }
+
+    @Test
+    public void updateStudentDupEmail() throws Exception {
+        // create 2 students
+
+        StudentDTO sdto = new StudentDTO(0, "name test", "ntest@csumb.edu", 0, null);
+        MockHttpServletResponse response;
 
         response = mvc.perform(
                         MockMvcRequestBuilders
                                 .post("/student")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(studentDTOJson))
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
                 .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        int  student_id = Integer.parseInt(response.getContentAsString());
+        assertTrue(student_id > 0);
 
+        StudentDTO sdto2 = new StudentDTO(0, "name test2", "ntest2@csumb.edu", 0, null);
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .post("/student")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto2)))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        int  student_id2 = Integer.parseInt(response.getContentAsString());
+        assertTrue(student_id2 > 0);
 
+        // attempt to change email of student #1 to student #2
+        StudentDTO sdto3 = new StudentDTO(student_id, "name test", "ntest2@csumb.edu", 0, null);
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .put("/student/"+student_id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto3)))
+                .andReturn().getResponse();
         assertEquals(400, response.getStatus());
+        assertTrue(response.getErrorMessage().contains("student email already exists"));
 
     }
 
-
     @Test
-    public void testDeleteStudentWithForce() throws Exception {
-        int studentId = 1;
-        when(studentRepository.findById(studentId)).thenReturn(Optional.of(new Student()));
-        String forceQueryParam = "true";
+    public void updateStudentNotFound() throws Exception {
+        StudentDTO sdto = new StudentDTO(99, "namenew test", "ntestnew@csumb.edu", 0, null);
         MockHttpServletResponse response;
 
         response = mvc.perform(
                         MockMvcRequestBuilders
-                                .delete("/student/{student_id}", studentId)
-                                .param("force", forceQueryParam))
+                                .put("/student/99")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
                 .andReturn().getResponse();
-        assertEquals(200, response.getStatus());
-
-    }
-
-
-    @Test
-    public void testUpdateStudent() throws Exception {
-        int studentId = 1;
-        Student existingStudent = new Student();
-        existingStudent.setStudent_id(studentId);
-        when(studentRepository.findById(studentId)).thenReturn(Optional.of(existingStudent));
-
-        StudentDTO updatedStudentDTO = new StudentDTO(1, "Updated Name", "updated email", 1, "Status");
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        String updatedStudentDTOJson = objectMapper.writeValueAsString(updatedStudentDTO);
-
-        MockHttpServletResponse response;
-        response = mvc.perform(MockMvcRequestBuilders
-                        .put("/student/{student_id}", studentId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(updatedStudentDTOJson))
-                .andReturn().getResponse();
-        assertEquals(200, response.getStatus());
-
+        assertEquals(404, response.getStatus());
 
     }
 
     @Test
-    public void testGetAllStudents() throws Exception {
-        List<Student> students = new ArrayList<>();
-
-        Student student1 = new Student();
-        student1.setName("John");
-        student1.setEmail("john@gmail.com");
-        student1.setStatusCode(1);
-        student1.setStatus("Active");
-        students.add(student1);
-
-        Student student2 = new Student();
-        student2.setName("Jane");
-        student2.setEmail("jane@gmail.com");
-        student2.setStatusCode(1);
-        student2.setStatus("Active");
-        students.add(student2);
-
-        when(studentRepository.findAll()).thenReturn(students);
-
+    public void deleteStudentNoEnrollments() throws Exception {
+        StudentDTO sdto = new StudentDTO(0, "name test", "ntest@csumb.edu", 0, null);
         MockHttpServletResponse response;
-        response = mvc.perform(MockMvcRequestBuilders
-                        .get("/student")
-                        .accept(MediaType.APPLICATION_JSON))
+
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .post("/student")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .accept(MediaType.APPLICATION_JSON)
+                                .content(asJsonString(sdto)))
                 .andReturn().getResponse();
         assertEquals(200, response.getStatus());
+        int  student_id = Integer.parseInt(response.getContentAsString());
+        assertTrue(student_id > 0);
+
+        // delete the new student
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/"+student_id))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+
+        // another delete should be OK.
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/"+student_id))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+
     }
 
+    @Test
+    public void deleteStudentWithEnrollment() throws Exception {
+        MockHttpServletResponse response;
+        // delete the new student
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/1"))
+                .andReturn().getResponse();
+        assertEquals(400, response.getStatus()); // BAD_REQUEST
+        assertTrue(response.getErrorMessage().contains("student has enrollments"));
+
+        // now do a force delete
+        response = mvc.perform(
+                        MockMvcRequestBuilders
+                                .delete("/student/1?force=yes"))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+
+    }
 
     private static String asJsonString(final Object obj) {
         try {
