@@ -1,6 +1,11 @@
 package com.cst438.service;
 
 
+import com.cst438.domain.Enrollment;
+import com.cst438.domain.EnrollmentDTO;
+import com.cst438.domain.EnrollmentRepository;
+import com.cst438.domain.FinalGradeDTO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -8,12 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.cst438.domain.FinalGradeDTO;
-import com.cst438.domain.Enrollment;
-import com.cst438.domain.EnrollmentDTO;
-import com.cst438.domain.EnrollmentRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 @ConditionalOnProperty(prefix = "gradebook", name = "service", havingValue = "mq")
@@ -33,6 +32,10 @@ public class GradebookServiceMQ implements GradebookService {
 		System.out.println("Start Message "+ student_email +" " + course_id); 
 		// create EnrollmentDTO, convert to JSON string and send to gradebookQueue
 		// TODO
+		EnrollmentDTO enrollmentDTO = new EnrollmentDTO(0, student_email, student_name, course_id);
+		String jsonEnrollment = asJsonString(enrollmentDTO);
+		rabbitTemplate.convertAndSend(gradebookQueue.getName(), jsonEnrollment);
+
 	}
 	
 	@RabbitListener(queues = "registration-queue")
@@ -47,6 +50,14 @@ public class GradebookServiceMQ implements GradebookService {
 		// deserialize the string message to FinalGradeDTO[] 
 		
 		// TODO
+		FinalGradeDTO[] grades = fromJsonString(message, FinalGradeDTO[].class);
+		for(int i = 0; i < grades.length; i++){
+			Enrollment enrollment = enrollmentRepository.findByEmailAndCourseId(grades[i].studentEmail(), grades[i].courseId());
+			if(enrollment != null){
+				enrollment.setCourseGrade(grades[i].grade());
+				enrollmentRepository.save(enrollment);
+			}
+		}
 
 	}
 	
