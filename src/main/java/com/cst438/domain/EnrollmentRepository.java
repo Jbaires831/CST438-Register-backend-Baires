@@ -9,7 +9,7 @@ import java.util.List;
 public interface EnrollmentRepository extends CrudRepository <Enrollment, Integer> {
 
 	@Query("select e from Enrollment e where e.student.email=:email and e.year=:year and e.semester=:semester")
-	List<Enrollment> findStudentSchedule(
+	public List<Enrollment> findStudentSchedule(
 			@Param("email") String email,
 			@Param("year") int year,
 			@Param("semester") String semester);
@@ -18,7 +18,6 @@ public interface EnrollmentRepository extends CrudRepository <Enrollment, Intege
 	Enrollment findByEmailAndCourseId(@Param("email") String email, @Param("course_id") int course_id);
 
 	@Query("select e from Enrollment e where e.student.student_id=:id")
-	List<Enrollment> findByStudentId( @Param("id") int id);
-
+	List<Enrollment> findAllByStudentId(@Param("id") int student_id);
 
 }

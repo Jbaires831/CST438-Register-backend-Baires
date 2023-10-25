@@ -1,18 +1,19 @@
 package com.cst438.controller;
 
 import com.cst438.domain.*;
+import com.cst438.service.GradebookService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @CrossOrigin
 public class StudentController {
+    @Autowired
+    CourseRepository courseRepository;
 
     @Autowired
     StudentRepository studentRepository;
@@ -20,83 +21,69 @@ public class StudentController {
     @Autowired
     EnrollmentRepository enrollmentRepository;
 
-    @GetMapping("/student")
-    public StudentDTO[] getStudents() {
-        Iterable<Student> list = studentRepository.findAll();
-        ArrayList<StudentDTO> alist = new ArrayList<>();
-        for (Student s : list) {
-            StudentDTO sdto = new StudentDTO(s.getStudent_id(), s.getName(), s.getEmail(), s.getStatusCode(), s.getStatus());
-            alist.add(sdto);
-        }
-        return alist.toArray(new StudentDTO[alist.size()]);
-    }
+    @Autowired
+    GradebookService gradebookService;
 
-    @GetMapping("/student/{id}")
-    public StudentDTO getStudent(@PathVariable("id") int id) {
-        Student s = studentRepository.findById(id).orElse(null);
-        if (s!=null) {
-            StudentDTO sdto = new StudentDTO(s.getStudent_id(), s.getName(), s.getEmail(), s.getStatusCode(), s.getStatus());
-            return sdto;
-        } else {
-            throw  new ResponseStatusException( HttpStatus.NOT_FOUND, "student not found "+id);
-        }
-    }
-
-    @PutMapping("/student/{id}")
-    public void updateStudent(@PathVariable("id")int id, @RequestBody StudentDTO sdto) {
-        Student s = studentRepository.findById(id).orElse(null);
-        if (s==null) {
-            throw  new ResponseStatusException( HttpStatus.NOT_FOUND, "student not found "+id);
-        }
-        // has email been changed, check that new email does not exist in database
-        if (!s.getEmail().equals(sdto.email())) {
-            // update name, email.  new email must not exist in database
-            Student check = studentRepository.findByEmail(sdto.email());
-            if (check != null) {
-                // error.  email exists.
-                throw  new ResponseStatusException( HttpStatus.BAD_REQUEST, "student email already exists "+sdto.email());
-            }
-        }
-        s.setEmail(sdto.email());
-        s.setName(sdto.name());
-        s.setStatusCode(sdto.statusCode());
-        s.setStatus(sdto.status());
-        studentRepository.save(s);
-    }
-
+    // Adds a student
     @PostMapping("/student")
-    public int createStudent(@RequestBody StudentDTO sdto) {
-        Student check = studentRepository.findByEmail(sdto.email());
-        if (check != null) {
-            // error.  email exists.
-            throw  new ResponseStatusException( HttpStatus.BAD_REQUEST, "student email already exists "+sdto.email());
-        }
-        Student s = new Student();
-        s.setEmail(sdto.email());
-        s.setName(sdto.name());
-        s.setStatusCode(sdto.statusCode());
-        s.setStatus(sdto.status());
-        studentRepository.save(s);
-        // return the database generated student_id
-        return s.getStudent_id();
+    @Transactional
+    public Student addStudent( @RequestBody StudentDTO studentDto ) {
+        Student newStudent = new Student();
+        newStudent.setName(studentDto.name());
+        newStudent.setEmail(studentDto.email());
+        newStudent.setStatusCode(studentDto.statusCode());
+        newStudent.setStatus(studentDto.status());
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        newStudent.setPassword(encoder.encode(studentDto.password()));
+        newStudent.setRole(studentDto.role());
+        return studentRepository.save(newStudent);
     }
 
-    @DeleteMapping("/student/{id}")
-    public void deleteStudent(@PathVariable("id") int id, @RequestParam("force") Optional<String> force) {
-        Student s = studentRepository.findById(id).orElse(null);
-        if (s!=null) {
-            // are there enrollments?
-            List<Enrollment> list = enrollmentRepository.findByStudentId(id);
-            if (list.size()>0 && force.isEmpty()) {
-                throw  new ResponseStatusException( HttpStatus.BAD_REQUEST, "student has enrollments");
-            } else {
-                studentRepository.deleteById(id);
+    // Deletes a student
+    @DeleteMapping("/student/{student_id}")
+    @Transactional
+    public boolean deleteStudent(  @PathVariable int student_id ) {
+        List<Enrollment> studentEnrollments = enrollmentRepository.findAllByStudentId(student_id);
+        for (Enrollment enrollment : studentEnrollments) {
+            if (enrollmentRepository.existsById(enrollment.getEnrollment_id())) {
+                enrollmentRepository.deleteById(enrollment.getEnrollment_id());
             }
-        } else {
-            // if student does not exist.  do nothing
-            return;
         }
-
+        if (studentRepository.existsById(student_id)) {
+            studentRepository.deleteById(student_id);
+            return true;
+        }
+        return false;
     }
 
+    // Updates a student
+    @PutMapping("/student/{student_id}")
+    @Transactional
+    public boolean updateStudent(  @PathVariable int student_id, @RequestBody StudentDTO studentDto  ) {
+        Student student = studentRepository.findById(student_id).orElse(null);
+        if (student != null) {
+            student.setName(studentDto.name());
+            student.setEmail(studentDto.email());
+            student.setStatusCode(studentDto.statusCode());
+            student.setStatus(studentDto.status());
+            studentRepository.save(student);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // Lists all students
+    @GetMapping("/students")
+    public List<Student> getAllStudents() {
+        List<Student> students = (List<Student>) studentRepository.findAll();
+        return students;
+    }
+
+    // Get Student By Email
+    @GetMapping("/student/{email}")
+    public Student getStudentByEmail(@PathVariable String email) {
+        Student student = studentRepository.findByEmail(email);
+        return student;
+    }
 }

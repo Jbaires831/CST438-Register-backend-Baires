@@ -7,7 +7,7 @@ import javax.persistence.Id;
 
 @Entity
 public class Student {
-	
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private int student_id;
@@ -15,11 +15,13 @@ public class Student {
 	private String email;
 	private int statusCode;
 	private String status;
-	
+	private String password;
+	private String role;
+
 	public Student() {
 		super();
 	}
-	
+
 	public int getStudent_id() {
 		return student_id;
 	}
@@ -49,6 +51,18 @@ public class Student {
 	}
 	public void setStatus(String status) {
 		this.status = status;
+	}
+	public String getPassword() {
+		return password;
+	}
+	public void setPassword(String password) {
+		this.password = password;
+	}
+	public String getRole() {
+		return role;
+	}
+	public void setRole(String role) {
+		this.role = role;
 	}
 	@Override
 	public String toString() {
